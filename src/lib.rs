@@ -31,7 +31,6 @@ impl ConfigExt for sled::Config {
     }
 }
 
-#[derive(Clone)]
 pub struct Conn {
     pub db: sled::Db,
     pub items: sled::Tree,
