@@ -8,4 +8,6 @@ pub enum Error {
     Table(#[from] crate::table::TableError),
     #[error("store error: {0}")]
     Store(#[from] sled::Error),
+    #[error(transparent)]
+    Cron(#[from] crate::cron_service::CronError),
 }

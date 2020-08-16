@@ -19,7 +19,8 @@ pub use error::*;
 
 mod lock_table;
 
-mod cron_services;
+mod cron_service;
+pub use cron_service::*;
 
 pub trait ConfigExt {
     fn open_sledis(&self) -> Result<Conn, sled::Error>;
