@@ -19,6 +19,8 @@ pub use error::*;
 
 mod lock_table;
 
+mod cron_services;
+
 pub trait ConfigExt {
     fn open_sledis(&self) -> Result<Conn, sled::Error>;
 }
@@ -29,6 +31,7 @@ impl ConfigExt for sled::Config {
     }
 }
 
+#[derive(Clone)]
 pub struct Conn {
     pub db: sled::Db,
     pub items: sled::Tree,
