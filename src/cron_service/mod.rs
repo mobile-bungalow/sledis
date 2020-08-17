@@ -25,6 +25,8 @@ pub enum CronError {
     TtlAcq(sled::Error),
     #[error("could not convert bytes stored in ttl tree to system time {0:?}")]
     SystemTimeFormat(Vec<u8>),
+    #[error("Could not initialize thread pool for cron service {0:?}")]
+    ThreadPoolInit(#[from] std::io::Error),
 }
 
 struct SysTime(SystemTime);
@@ -153,16 +155,41 @@ impl AsyncJobScheduler {
     }
 }
 
+// TODO: improve docs with links
 /// Provides an encapsulated run time for scheduling delayed operations on the
-/// database
+/// database.
 pub struct JobScheduler {
     inner: AsyncJobScheduler,
     pool: ThreadPool,
 }
 
 impl JobScheduler {
-    pub fn new() -> () {}
-    pub fn expire_key_at() -> () {}
-    pub fn expire_key_in() -> () {}
-    pub fn persist_key() -> () {}
+    /// Create a new job scheduler and runtime.
+    pub fn new(conn: Arc<Conn>) -> Result<Self, CronError> {
+        Ok(Self {
+            inner: AsyncJobScheduler::new(conn),
+            pool: ThreadPool::new()?,
+        })
+    }
+
+    /// attempts to schedule a blob for deletion at an instant in the future.
+    /// if the instant is in the past. the key is deleted immediately.
+    /// if the key is nonexistant. nothing is scheduled.
+    pub fn expire_blob_at(&mut self, key: IVec, instant: Instant) -> Result<(), Error> {
+        if let Some(fut) = self.inner.expire_blob_at(key, instant) {
+            self.pool.spawn_ok(fut);
+        }
+        Ok(())
+    }
+
+    pub fn expire_blob_in(&mut self, key: IVec, delay: Duration) -> Result<(), Error> {
+        if let Some(fut) = self.inner.expire_blob_in(key, delay) {
+            self.pool.spawn_ok(fut);
+        }
+        Ok(())
+    }
+
+    pub fn persist_blob(&mut self, key: IVec) -> Result<Option<SystemTime>, Error> {
+        self.inner.persist_blob(key)
+    }
 }
