@@ -115,7 +115,19 @@ impl AsyncJobScheduler {
             });
 
             let (handle, fut) = self.cron_inner(action_pin, delay);
-            block_on(self.expiration_queue.lock()).insert(key, handle);
+
+            let time_ms = (SystemTime::now() + delay)
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap() // TODO: PANICS HERE. THE TYPES: THEY ARE WRONG AAAHHHH
+                .as_millis();
+
+            // set the new expiration date
+            let _ = self.conn.ttl.insert(key.as_ref(), &time_ms.to_le_bytes());
+            // if there was a preexisting future for this key, kill it.
+            if let Some(old_handle) = block_on(self.expiration_queue.lock()).insert(key, handle) {
+                let _ = old_handle.send(());
+            }
+
             Some(fut)
         }
     }
