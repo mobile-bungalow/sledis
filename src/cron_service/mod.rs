@@ -52,15 +52,21 @@ impl TryFrom<&[u8]> for SysTime {
 /// Provides an async API for scheduling delayed operations and cron jobs.
 /// In order for spawned commands to execute they must be run on an async
 /// runtime.
-pub struct AsyncJobScheduler {
-    conn: Arc<Conn>,
+pub struct AsyncJobScheduler<C>
+where
+    C: std::ops::Deref<Target = Conn> + Send + Sync + 'static,
+{
+    conn: Arc<C>,
     expiration_queue: Arc<Mutex<BTreeMap<IVec, oneshot::Sender<()>>>>,
 }
 
-impl AsyncJobScheduler {
+impl<C> AsyncJobScheduler<C>
+where
+    C: std::ops::Deref<Target = Conn> + Send + Sync + 'static,
+{
     /// Creates a new job scheduler with jobs to be managed by a user selected
     /// asynchronous runtime.
-    pub fn new(conn: Arc<Conn>) -> Self {
+    pub fn new(conn: Arc<C>) -> Self {
         Self {
             conn,
             expiration_queue: Arc::new(Mutex::new(BTreeMap::new())),
@@ -103,7 +109,7 @@ impl AsyncJobScheduler {
         delay: Duration,
     ) -> Option<impl Future<Output = ()>> {
         if delay == Duration::from_secs(0) {
-            let _ = self.conn.blob_remove(&key);
+            let _ = &self.conn.blob_remove(&key);
             None
         } else {
             let conn = self.conn.clone();
@@ -111,7 +117,7 @@ impl AsyncJobScheduler {
             let key_clone = key.clone();
 
             let action_pin = Box::pin(async move {
-                let _ = conn.as_ref().blob_remove(&key_clone);
+                let _ = conn.blob_remove(&key_clone);
                 let _ = conn.ttl.remove(&key_clone);
                 exp_queue_clone.lock().await.remove(&key_clone);
             });
@@ -158,14 +164,20 @@ impl AsyncJobScheduler {
 // TODO: improve docs with links
 /// Provides an encapsulated run time for scheduling delayed operations on the
 /// database.
-pub struct JobScheduler {
-    inner: AsyncJobScheduler,
+pub struct JobScheduler<C>
+where
+    C: std::ops::Deref<Target = Conn> + Send + Sync + 'static,
+{
+    inner: AsyncJobScheduler<C>,
     pool: ThreadPool,
 }
 
-impl JobScheduler {
+impl<C> JobScheduler<C>
+where
+    C: std::ops::Deref<Target = Conn> + Send + Sync + 'static,
+{
     /// Create a new job scheduler and runtime.
-    pub fn new(conn: Arc<Conn>) -> Result<Self, CronError> {
+    pub fn new(conn: Arc<C>) -> Result<Self, CronError> {
         Ok(Self {
             inner: AsyncJobScheduler::new(conn),
             pool: ThreadPool::new()?,
@@ -178,15 +190,19 @@ impl JobScheduler {
     pub fn expire_blob_at(&mut self, key: IVec, instant: Instant) -> Result<(), Error> {
         if let Some(fut) = self.inner.expire_blob_at(key, instant) {
             self.pool.spawn_ok(fut);
+            Ok(())
+        } else {
+            Ok(())
         }
-        Ok(())
     }
 
     pub fn expire_blob_in(&mut self, key: IVec, delay: Duration) -> Result<(), Error> {
         if let Some(fut) = self.inner.expire_blob_in(key, delay) {
             self.pool.spawn_ok(fut);
+            Ok(())
+        } else {
+            Ok(())
         }
-        Ok(())
     }
 
     pub fn persist_blob(&mut self, key: IVec) -> Result<Option<SystemTime>, Error> {
