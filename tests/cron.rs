@@ -55,10 +55,14 @@ fn reschedule_deletion() {
     // the key still exists past the half way point
     std::thread::sleep(Duration::from_millis(350));
 
-    let ret_v = db.blob_get(k).unwrap().unwrap();
-    assert_eq!(&v, &ret_v.as_ref(), "Value was prematurely deleted.");
+    let ret_v = db.blob_get(k).unwrap();
+    assert_eq!(
+        Some(v.as_ref()),
+        ret_v.as_ref().map(AsRef::as_ref),
+        "Value was prematurely deleted."
+    );
 
-    std::thread::sleep(Duration::from_millis(250));
+    std::thread::sleep(Duration::from_millis(160));
 
     let ret_v = db.blob_get(k).unwrap();
     assert_eq!(ret_v, None, "Value Was not Deleted.");

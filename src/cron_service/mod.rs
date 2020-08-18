@@ -86,8 +86,14 @@ where
 
         let fut = async move {
             let delay = Delay::new(delay).then(|_| action);
-            select(delay, rx).await;
-            exp_queue_clone.lock().await.remove(&key);
+            match select(delay, rx).await {
+                futures::future::Either::Left(_) => {
+                    exp_queue_clone.lock().await.remove(&key);
+                }
+                _ => {
+                    // The caller should handle this
+                }
+            }
         };
 
         (tx, fut)
@@ -101,7 +107,9 @@ where
         key: IVec,
         instant: Instant,
     ) -> Option<impl Future<Output = ()>> {
-        let dur = instant.duration_since(Instant::now());
+        let dur = instant
+            .checked_duration_since(Instant::now())
+            .unwrap_or_default();
         self.expire_blob_in(key, dur)
     }
 
@@ -134,9 +142,11 @@ where
             // set the new expiration date
             let _ = self.conn.ttl.insert(key.as_ref(), &time_ms.to_le_bytes());
             // if there was a preexisting future for this key, kill it.
-            if let Some(old_handle) = block_on(self.expiration_queue.lock()).insert(key, handle) {
+            if let Some(old_handle) = block_on(self.expiration_queue.lock()).remove(&key) {
                 let _ = old_handle.send(());
             }
+
+            block_on(self.expiration_queue.lock()).insert(key, handle);
 
             Some(fut)
         }
