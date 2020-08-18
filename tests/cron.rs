@@ -26,7 +26,8 @@ fn schedule_deletion() {
     sched.expire_blob_in(k.into(), dur).unwrap();
     std::thread::sleep(dur);
 
-    // the key was inserted
     let ret_v = db.blob_get(k).unwrap();
     assert_eq!(ret_v, None, "Value Was not Deleted.");
+
+    // the key was inserted
 }

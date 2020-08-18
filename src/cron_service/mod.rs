@@ -8,7 +8,6 @@ use futures::{
     future::select,
     future::BoxFuture,
     lock::Mutex,
-    FutureExt,
 };
 use futures_timer::Delay;
 use sled::IVec;
@@ -52,6 +51,7 @@ impl TryFrom<&[u8]> for SysTime {
 /// Provides an async API for scheduling delayed operations and cron jobs.
 /// In order for spawned commands to execute they must be run on an async
 /// runtime.
+/// TODO: replace hashmap with dashmap
 pub struct AsyncJobScheduler<C>
 where
     C: std::ops::Deref<Target = Conn> + Send + Sync + 'static,
@@ -81,9 +81,9 @@ where
     ) -> (oneshot::Sender<()>, impl Future<Output = ()> + 'b) {
         let (tx, rx) = oneshot::channel();
 
+        // let delay = Delay::new(delay).then(|_| action);
         let fut = async move {
-            let delay = Delay::new(delay).then(|_| action);
-            select(delay, rx).await;
+            select(action, rx).await;
         };
 
         (tx, fut)

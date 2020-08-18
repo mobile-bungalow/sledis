@@ -72,7 +72,7 @@ impl Conn {
     }
 
     pub fn blob_remove(&self, name: &[u8]) -> Result<Option<IVec>, sled::Error> {
-        self.items.get(&keys::blob(name))
+        self.items.remove(&keys::blob(name))
     }
 
     pub fn flush(&self) -> Result<(), sled::Error> {
