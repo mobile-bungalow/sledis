@@ -49,6 +49,7 @@ fn reschedule_deletion() {
     let dur = Duration::from_millis(250);
     sched.expire_blob_in(k.into(), dur).unwrap();
 
+    // cancel the deletion with a reschedule
     let dur = Duration::from_millis(500);
     sched.expire_blob_in(k.into(), dur).unwrap();
 
@@ -66,4 +67,27 @@ fn reschedule_deletion() {
 
     let ret_v = db.blob_get(k).unwrap();
     assert_eq!(ret_v, None, "Value Was not Deleted.");
+}
+
+#[test]
+fn persist_blob() {
+    let db = Arc::new(TempDb::new());
+    let mut sched = JobScheduler::new(db.clone()).unwrap();
+
+    let (k, v) = (b"key_1", b"val_1");
+    db.blob_set(k, v.into()).unwrap();
+
+    let dur = Duration::from_millis(250);
+    sched.expire_blob_in(k.into(), dur).unwrap();
+
+    sched.persist_blob(k.into()).unwrap();
+
+    std::thread::sleep(Duration::from_millis(350));
+
+    let ret_v = db.blob_get(k).unwrap();
+    assert_eq!(
+        Some(v.as_ref()),
+        ret_v.as_ref().map(AsRef::as_ref),
+        "Value was prematurely deleted."
+    );
 }
