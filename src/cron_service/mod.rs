@@ -8,6 +8,7 @@ use futures::{
     future::select,
     future::BoxFuture,
     lock::Mutex,
+    FutureExt,
 };
 use futures_timer::Delay;
 use sled::IVec;
@@ -78,12 +79,15 @@ where
         &self,
         action: BoxFuture<'b, ()>,
         delay: Duration,
+        key: IVec,
     ) -> (oneshot::Sender<()>, impl Future<Output = ()> + 'b) {
         let (tx, rx) = oneshot::channel();
+        let exp_queue_clone = self.expiration_queue.clone();
 
-        // let delay = Delay::new(delay).then(|_| action);
         let fut = async move {
-            select(action, rx).await;
+            let delay = Delay::new(delay).then(|_| action);
+            select(delay, rx).await;
+            exp_queue_clone.lock().await.remove(&key);
         };
 
         (tx, fut)
@@ -113,16 +117,14 @@ where
             None
         } else {
             let conn = self.conn.clone();
-            let exp_queue_clone = self.expiration_queue.clone();
             let key_clone = key.clone();
 
             let action_pin = Box::pin(async move {
                 let _ = conn.blob_remove(&key_clone);
                 let _ = conn.ttl.remove(&key_clone);
-                exp_queue_clone.lock().await.remove(&key_clone);
             });
 
-            let (handle, fut) = self.cron_inner(action_pin, delay);
+            let (handle, fut) = self.cron_inner(action_pin, delay, key.clone());
 
             let time_ms = (SystemTime::now() + delay)
                 .duration_since(std::time::UNIX_EPOCH)
